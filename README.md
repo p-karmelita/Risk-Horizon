@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Risk Horizon - Supplier Risk & Market Disruption Agent
 
 Risk Horizon helps companies detect supplier and market disruption early by scanning live public web data and turning it into clear, source-backed risk insights.
@@ -131,3 +132,6 @@ Response:
 - The live Bright Data integration uses a generic HTTP request flow and lightweight HTML parsing so the MVP stays dependency-light.
 - The OpenAI path uses a JSON-only chat completion request. Anthropic uses a JSON-only message request.
 - This project is intentionally optimized for demo clarity, strong visuals, and resilience over exhaustive production hardening.
+=======
+# Risk-Horizon
+>>>>>>> 8eac98cf2b2ae015ad6b0ca25f06ffbf1beb6efe
