@@ -1,11 +1,31 @@
 import { getMockSupplierFixture } from "@/lib/mockData";
-import type { ScrapedDocument, SearchResult } from "@/lib/types";
+import type { ScrapedDocument, SearchResult, AgentPerformanceMetrics } from "@/lib/types";
 
 const BRIGHT_DATA_API_KEY = process.env.BRIGHT_DATA_API_KEY;
 const BRIGHT_DATA_SERP_ZONE = process.env.BRIGHT_DATA_SERP_ZONE;
 const BRIGHT_DATA_UNLOCKER_ZONE = process.env.BRIGHT_DATA_UNLOCKER_ZONE;
 const BRIGHT_DATA_REQUEST_ENDPOINT =
   process.env.BRIGHT_DATA_REQUEST_ENDPOINT ?? "https://api.brightdata.com/request";
+
+// Performance tracking for agentic operations
+export const performanceMetrics: AgentPerformanceMetrics[] = [];
+
+function logMetric(metric: AgentPerformanceMetrics) {
+  performanceMetrics.push(metric);
+  console.log(`[Agent Performance] ${metric.stage}:`, {
+    duration: metric.duration ? `${metric.duration}ms` : "in progress",
+    success: metric.success,
+    details: metric.details
+  });
+}
+
+export function clearMetrics() {
+  performanceMetrics.length = 0;
+}
+
+export function getMetrics(): AgentPerformanceMetrics[] {
+  return [...performanceMetrics];
+}
 
 interface BrightDataNormalizedSearchResult {
   title: string;
@@ -47,15 +67,31 @@ async function brightDataRequest<TResponse>({
   targetUrl,
   format,
   country = "us",
-  method = "GET"
+  method = "GET",
+  stageName
 }: {
   zone: string;
   targetUrl: string;
   format: "json" | "raw";
   country?: string;
   method?: "GET" | "POST";
+  stageName?: string;
 }): Promise<TResponse | string> {
-  const response = await fetch(BRIGHT_DATA_REQUEST_ENDPOINT, {
+  const startTime = Date.now();
+  const metric: AgentPerformanceMetrics = {
+    stage: stageName || `Bright Data ${zone} Request`,
+    startTime,
+    success: false,
+    details: {
+      zone,
+      targetUrl: targetUrl.slice(0, 100),
+      format,
+      method
+    }
+  };
+
+  try {
+    const response = await fetch(BRIGHT_DATA_REQUEST_ENDPOINT, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${BRIGHT_DATA_API_KEY}`,
@@ -68,21 +104,44 @@ async function brightDataRequest<TResponse>({
       method,
       country
     }),
-    cache: "no-store"
-  });
+      cache: "no-store"
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(
-      `Bright Data request failed: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody.slice(0, 240)}` : ""}`
-    );
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      const error = `Bright Data request failed: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody.slice(0, 240)}` : ""}`;
+      metric.endTime = Date.now();
+      metric.duration = metric.endTime - metric.startTime;
+      metric.error = error;
+      logMetric(metric);
+      throw new Error(error);
+    }
+
+    let result: TResponse | string;
+    if (format === "json") {
+      result = (await response.json()) as TResponse;
+    } else {
+      result = await response.text();
+    }
+
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = {
+      ...metric.details,
+      responseSize: typeof result === "string" ? result.length : JSON.stringify(result).length,
+      statusCode: response.status
+    };
+    logMetric(metric);
+
+    return result;
+  } catch (error) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.error = error instanceof Error ? error.message : String(error);
+    logMetric(metric);
+    throw error;
   }
-
-  if (format === "json") {
-    return (await response.json()) as TResponse;
-  }
-
-  return response.text();
 }
 
 function normalizeWhitespace(text: string) {
@@ -154,25 +213,47 @@ export async function searchWithBrightData(
     throw new Error("Bright Data is not fully configured.");
   }
 
-  // Bright Data's docs currently show the REST entrypoint as POST /request with
-  // `zone`, `url`, and `format`. If your account uses a different REST hostname,
-  // auth method, or zone-specific parameters, update BRIGHT_DATA_REQUEST_ENDPOINT
-  // or the payload below.
-  const payload = (await brightDataRequest<BrightDataSerpResponse>({
-    zone: BRIGHT_DATA_SERP_ZONE as string,
-    targetUrl: `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en&gl=us`,
-    format: "json",
-    method: "GET",
-    country: "us"
-  })) as BrightDataSerpResponse;
+  const startTime = Date.now();
+  const metric: AgentPerformanceMetrics = {
+    stage: "SERP API Search",
+    startTime,
+    success: false,
+    details: { query }
+  };
 
-  const normalized = normalizeBrightDataSearchResults(payload);
+  try {
+    const payload = (await brightDataRequest<BrightDataSerpResponse>({
+      zone: BRIGHT_DATA_SERP_ZONE as string,
+      targetUrl: `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en&gl=us`,
+      format: "json",
+      method: "GET",
+      country: "us",
+      stageName: `SERP Search: "${query.slice(0, 50)}"`
+    })) as BrightDataSerpResponse;
 
-  if (normalized.length === 0) {
-    throw new Error("Bright Data SERP returned no organic results.");
+    const normalized = normalizeBrightDataSearchResults(payload);
+
+    if (normalized.length === 0) {
+      throw new Error("Bright Data SERP returned no organic results.");
+    }
+
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = {
+      ...metric.details,
+      resultsCount: normalized.length
+    };
+    logMetric(metric);
+
+    return normalized;
+  } catch (error) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.error = error instanceof Error ? error.message : String(error);
+    logMetric(metric);
+    throw error;
   }
-
-  return normalized;
 }
 
 export async function scrapeWithBrightData(
@@ -182,44 +263,88 @@ export async function scrapeWithBrightData(
     throw new Error("Bright Data is not fully configured.");
   }
 
-  // Bright Data's Unlocker API also uses POST /request in the current docs.
-  // Some accounts may prefer Scraping Browser or async Unlocker flows instead.
-  // If so, swap this helper without changing the rest of the app.
-  const payload = (await brightDataRequest<BrightDataUnlockerResponse>({
-    zone: BRIGHT_DATA_UNLOCKER_ZONE as string,
-    targetUrl: url,
-    format: "raw",
-    method: "GET",
-    country: "us"
-  })) as string;
-
-  let html = payload;
-  try {
-    const maybeWrapped = JSON.parse(payload) as BrightDataUnlockerResponse;
-    if (typeof maybeWrapped.body === "string") {
-      html = maybeWrapped.body;
-    }
-  } catch {
-    // Raw HTML/text is expected for most Unlocker responses.
-  }
-
-  const text = stripHtml(html).slice(0, 10000);
-  if (!text) {
-    throw new Error("Bright Data Unlocker returned empty page text.");
-  }
-
-  return {
-    url,
-    title: extractTitleFromHtml(html),
-    text
+  const startTime = Date.now();
+  const metric: AgentPerformanceMetrics = {
+    stage: "Web Unlocker Scrape",
+    startTime,
+    success: false,
+    details: { url: url.slice(0, 100) }
   };
+
+  try {
+    const payload = (await brightDataRequest<BrightDataUnlockerResponse>({
+      zone: BRIGHT_DATA_UNLOCKER_ZONE as string,
+      targetUrl: url,
+      format: "raw",
+      method: "GET",
+      country: "us",
+      stageName: `Scrape: ${new URL(url).hostname}`
+    })) as string;
+
+    let html = payload;
+    try {
+      const maybeWrapped = JSON.parse(payload) as BrightDataUnlockerResponse;
+      if (typeof maybeWrapped.body === "string") {
+        html = maybeWrapped.body;
+      }
+    } catch {
+      // Raw HTML/text is expected for most Unlocker responses.
+    }
+
+    const text = stripHtml(html).slice(0, 10000);
+    if (!text) {
+      throw new Error("Bright Data Unlocker returned empty page text.");
+    }
+
+    const result = {
+      url,
+      title: extractTitleFromHtml(html),
+      text
+    };
+
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = {
+      ...metric.details,
+      title: result.title,
+      contentLength: text.length
+    };
+    logMetric(metric);
+
+    return result;
+  } catch (error) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.error = error instanceof Error ? error.message : String(error);
+    logMetric(metric);
+    throw error;
+  }
 }
 
 export async function searchSupplierWeb(
   supplierName: string,
-  queries: string[]
+  queries: string[],
+  liveMode = false
 ): Promise<SearchResult[]> {
-  if (!brightDataConfigured()) {
+  const startTime = Date.now();
+  const metric: AgentPerformanceMetrics = {
+    stage: "Multi-Query Search Aggregation",
+    startTime,
+    success: false,
+    details: {
+      supplierName,
+      queriesCount: queries.length,
+      liveMode
+    }
+  };
+
+  if (!liveMode || !brightDataConfigured()) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = { ...metric.details, mode: "mock" };
+    logMetric(metric);
     return getMockSupplierFixture(supplierName).searchResults;
   }
 
@@ -230,9 +355,11 @@ export async function searchSupplierWeb(
     );
 
     const deduped = new Map<string, SearchResult>();
+    let successfulQueries = 0;
 
     for (const response of responses) {
       if (response.status !== "fulfilled") continue;
+      successfulQueries++;
       for (const result of response.value) {
         if (!deduped.has(result.url)) {
           deduped.set(result.url, mapSearchResult(result));
@@ -246,8 +373,25 @@ export async function searchSupplierWeb(
       throw new Error("Bright Data SERP returned no usable search results.");
     }
 
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = {
+      ...metric.details,
+      mode: "live",
+      successfulQueries,
+      totalResults: parsed.length
+    };
+    logMetric(metric);
+
     return parsed;
   } catch (error) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.error = error instanceof Error ? error.message : String(error);
+    metric.details = { ...metric.details, fallbackToMock: true };
+    logMetric(metric);
+    
     console.warn("Falling back to mock Bright Data search.", error);
     return getMockSupplierFixture(supplierName).searchResults;
   }
@@ -255,9 +399,27 @@ export async function searchSupplierWeb(
 
 export async function scrapeSupplierSources(
   supplierName: string,
-  results: SearchResult[]
+  results: SearchResult[],
+  liveMode = false
 ): Promise<ScrapedDocument[]> {
-  if (!brightDataConfigured()) {
+  const startTime = Date.now();
+  const metric: AgentPerformanceMetrics = {
+    stage: "Parallel Source Scraping",
+    startTime,
+    success: false,
+    details: {
+      supplierName,
+      sourcesCount: results.length,
+      liveMode
+    }
+  };
+
+  if (!liveMode || !brightDataConfigured()) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = { ...metric.details, mode: "mock" };
+    logMetric(metric);
     return getMockSupplierFixture(supplierName).scrapedDocuments;
   }
 
@@ -279,8 +441,25 @@ export async function scrapeSupplierSources(
       throw new Error("Bright Data Unlocker returned no usable page content.");
     }
 
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.success = true;
+    metric.details = {
+      ...metric.details,
+      mode: "live",
+      successfulScrapes: scraped.length,
+      failedScrapes: scrapedSettled.length - scraped.length
+    };
+    logMetric(metric);
+
     return scraped;
   } catch (error) {
+    metric.endTime = Date.now();
+    metric.duration = metric.endTime - metric.startTime;
+    metric.error = error instanceof Error ? error.message : String(error);
+    metric.details = { ...metric.details, fallbackToMock: true };
+    logMetric(metric);
+    
     console.warn("Falling back to mock source scraping.", error);
     return getMockSupplierFixture(supplierName).scrapedDocuments;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Binary, Play, TerminalSquare } from "lucide-react";
+import { ArrowRight, Binary, Play, TerminalSquare, Zap, Database } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 
 const exampleSuppliers = ["TSMC", "Maersk", "Nvidia", "CATL", "Albemarle"];
@@ -11,13 +11,17 @@ export function SupplierInput({
   onSupplierNameChange,
   onSubmit,
   onRunSimulation,
-  running
+  running,
+  liveMode,
+  onLiveModeChange
 }: {
   supplierName: string;
   onSupplierNameChange: (value: string) => void;
   onSubmit: (value: string) => void;
   onRunSimulation: (value: string) => void;
   running: boolean;
+  liveMode: boolean;
+  onLiveModeChange: (value: boolean) => void;
 }) {
   return (
     <div className="flex h-full flex-col gap-5">
@@ -62,6 +66,44 @@ export function SupplierInput({
         ))}
       </div>
 
+      <div className="rounded-[24px] bg-white/[0.04] p-4 ring-1 ring-white/5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+              {liveMode ? (
+                <Zap className="h-4 w-4 text-amber-400" />
+              ) : (
+                <Database className="h-4 w-4 text-cyan" />
+              )}
+              <span>Mode: {liveMode ? "Live API" : "Mock Data"}</span>
+            </div>
+            <StatusBadge
+              label={liveMode ? "Bright Data Active" : "Simulation"}
+              tone={liveMode ? "complete" : "idle"}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => onLiveModeChange(!liveMode)}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              liveMode ? "bg-amber-500" : "bg-slate-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                liveMode ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+        {liveMode && (
+          <p className="mt-2 text-xs text-slate-400">
+            Using Bright Data SERP API, Web Unlocker, and Scraping Browser for real-time data collection
+          </p>
+        )}
+      </div>
+
       <div className="mt-auto grid gap-3 md:grid-cols-2">
         <motion.button
           whileTap={{ scale: 0.98 }}
@@ -77,9 +119,13 @@ export function SupplierInput({
           whileTap={{ scale: 0.98 }}
           disabled={running || !supplierName.trim()}
           onClick={() => onSubmit(supplierName)}
-          className="flex items-center justify-center gap-2 rounded-[24px] bg-[linear-gradient(135deg,rgba(111,235,255,0.95),rgba(67,144,255,0.96))] px-5 py-4 font-display text-lg font-semibold text-slate-950 shadow-[0_18px_50px_rgba(35,140,255,0.32)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className={`flex items-center justify-center gap-2 rounded-[24px] px-5 py-4 font-display text-lg font-semibold shadow-[0_18px_50px_rgba(35,140,255,0.32)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 ${
+            liveMode
+              ? "bg-[linear-gradient(135deg,rgba(251,191,36,0.95),rgba(245,158,11,0.96))] text-slate-950"
+              : "bg-[linear-gradient(135deg,rgba(111,235,255,0.95),rgba(67,144,255,0.96))] text-slate-950"
+          }`}
         >
-          {running ? "Analyzing..." : "Analyze Supplier"}
+          {running ? "Analyzing..." : liveMode ? "Analyze Live" : "Analyze Supplier"}
           <ArrowRight className="h-5 w-5" />
         </motion.button>
       </div>

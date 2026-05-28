@@ -9,6 +9,25 @@ export type SourceType =
 
 export interface SupplierRequest {
   supplierName: string;
+  liveMode?: boolean;
+}
+
+export interface AgentPerformanceMetrics {
+  stage: string;
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  success: boolean;
+  error?: string;
+  details?: Record<string, any>;
+}
+
+export interface LiveModeContext {
+  enabled: boolean;
+  metrics: AgentPerformanceMetrics[];
+  totalDuration: number;
+  apiCallsCount: number;
+  successRate: number;
 }
 
 export interface SourceReference {

@@ -20,7 +20,7 @@ import { SupplierInput } from "@/components/SupplierInput";
 import { WorkflowMachine } from "@/components/WorkflowMachine";
 import { getMockSupplierFixture } from "@/lib/mockData";
 import { buildSupplierQueries } from "@/lib/prompts";
-import type { SearchResult, SupplierRiskReport } from "@/lib/types";
+import type { SearchResult, SupplierRiskReport, AgentPerformanceMetrics } from "@/lib/types";
 
 type StageKey = "input" | "search" | "analysis" | "report";
 
@@ -55,10 +55,12 @@ export default function HomePage() {
   const [completedStages, setCompletedStages] = useState<StageKey[]>([]);
   const [liveLogs, setLiveLogs] = useState<string[]>([]);
   const [mode, setMode] = useState<"mock" | "live">("mock");
+  const [liveMode, setLiveMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<string[]>([]);
   const [discoveredSources, setDiscoveredSources] = useState<SearchResult[]>([]);
   const [analysisTasks, setAnalysisTasks] = useState<string[]>([]);
+  const [performanceMetrics, setPerformanceMetrics] = useState<AgentPerformanceMetrics[]>([]);
 
   function pushLiveLog(message: string) {
     setLiveLogs((current) => {
@@ -70,18 +72,19 @@ export default function HomePage() {
     });
   }
 
-  function resetWorkflowState(nextSupplierName: string) {
+  function resetWorkflowState(nextSupplierName: string, isLive = false) {
     setSupplierName(nextSupplierName);
     setRunning(true);
     setError(null);
     setReport(null);
-    setMode("mock");
+    setMode(isLive ? "live" : "mock");
     setActiveStage("input");
     setCompletedStages(["input"]);
-    setLiveLogs([`Pipeline initialized for ${nextSupplierName}.`]);
+    setLiveLogs([`Pipeline initialized for ${nextSupplierName}. Mode: ${isLive ? "LIVE" : "MOCK"}`]);
     setSearchQueries([]);
     setDiscoveredSources([]);
     setAnalysisTasks([]);
+    setPerformanceMetrics([]);
   }
 
   function finalizeWorkflow(nextReport: SupplierRiskReport, nextMode: "mock" | "live") {
@@ -97,7 +100,7 @@ export default function HomePage() {
     const trimmed = value.trim();
     if (!trimmed) return;
 
-    resetWorkflowState(trimmed);
+    resetWorkflowState(trimmed, liveMode);
     const queries = buildSupplierQueries(trimmed).slice(0, 4);
     setSearchQueries(queries);
     pushLiveLog(`Supplier target received: ${trimmed}.`);
@@ -139,14 +142,27 @@ export default function HomePage() {
       const response = await fetch("/api/analyze-supplier", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierName: trimmed })
+        body: JSON.stringify({ supplierName: trimmed, liveMode })
       });
 
       if (!response.ok) {
         throw new Error("The supplier analysis request failed.");
       }
 
-      const data = (await response.json()) as SupplierRiskReport;
+      const data = (await response.json()) as SupplierRiskReport & {
+        _performance?: {
+          metrics: AgentPerformanceMetrics[];
+          totalDuration: number;
+          liveMode: boolean;
+        };
+      };
+
+      // Extract performance metrics if available
+      if (data._performance?.metrics) {
+        setPerformanceMetrics(data._performance.metrics);
+        pushLiveLog(`Performance: ${data._performance.totalDuration}ms total, ${data._performance.metrics.length} stages tracked`);
+      }
+
       const searchPreview = data.sources_used.slice(0, 5).map((source) => ({
         title: source.title,
         url: source.url,
@@ -174,10 +190,8 @@ export default function HomePage() {
         })
       );
 
-      finalizeWorkflow(
-        data,
-        sourceDomainSet.size === 1 && sourceDomainSet.has("example.com") ? "mock" : "live"
-      );
+      const detectedMode = liveMode && data._performance?.liveMode ? "live" : "mock";
+      finalizeWorkflow(data, detectedMode);
     } catch (caughtError) {
       clearInterval(liveTimer);
       setError(
@@ -194,7 +208,7 @@ export default function HomePage() {
     const trimmed = value.trim();
     if (!trimmed) return;
 
-    resetWorkflowState(trimmed);
+    resetWorkflowState(trimmed, false);
 
     const fixture = getMockSupplierFixture(trimmed);
     const queries = buildSupplierQueries(trimmed).slice(0, 4);
@@ -337,6 +351,8 @@ export default function HomePage() {
                 onSubmit={handleAnalyze}
                 onRunSimulation={handleRunSimulation}
                 running={running}
+                liveMode={liveMode}
+                onLiveModeChange={setLiveMode}
               />
             </MachineStage>
 
@@ -516,7 +532,11 @@ export default function HomePage() {
         </WorkflowMachine>
 
         <section className="mt-6 grid gap-6 2xl:grid-cols-[0.3fr_0.7fr]">
-          <AgentLog items={logItems} />
+          <AgentLog
+            items={logItems}
+            performanceMetrics={performanceMetrics}
+            liveMode={mode === "live"}
+          />
           <RiskReportOutput report={report} mode={mode} />
         </section>
       </div>
