@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Binary, Play, TerminalSquare, Zap, Database } from "lucide-react";
+import { ArrowRight, Binary, Play, TerminalSquare, Zap, Database, Brain } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 
 const exampleSuppliers = ["TSMC", "Maersk", "Nvidia", "CATL", "Albemarle"];
@@ -13,7 +13,9 @@ export function SupplierInput({
   onRunSimulation,
   running,
   liveMode,
-  onLiveModeChange
+  onLiveModeChange,
+  agenticMode,
+  onAgenticModeChange
 }: {
   supplierName: string;
   onSupplierNameChange: (value: string) => void;
@@ -22,6 +24,8 @@ export function SupplierInput({
   running: boolean;
   liveMode: boolean;
   onLiveModeChange: (value: boolean) => void;
+  agenticMode: boolean;
+  onAgenticModeChange: (value: boolean) => void;
 }) {
   return (
     <div className="flex h-full flex-col gap-5">
@@ -104,6 +108,44 @@ export function SupplierInput({
         )}
       </div>
 
+      <div className="rounded-[24px] bg-white/[0.04] p-4 ring-1 ring-white/5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+              {agenticMode ? (
+                <Brain className="h-4 w-4 text-purple-400" />
+              ) : (
+                <Zap className="h-4 w-4 text-cyan" />
+              )}
+              <span>AI: {agenticMode ? "Agentic (GPT-5-5)" : "Standard"}</span>
+            </div>
+            <StatusBadge
+              label={agenticMode ? "Autonomous AI" : "Standard AI"}
+              tone={agenticMode ? "active" : "idle"}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => onAgenticModeChange(!agenticMode)}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              agenticMode ? "bg-purple-500" : "bg-slate-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                agenticMode ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+        {agenticMode && (
+          <p className="mt-2 text-xs text-slate-400">
+            Using GPT-5-5 with autonomous reasoning, multi-step analysis, and advanced pattern recognition
+          </p>
+        )}
+      </div>
+
       <div className="mt-auto grid gap-3 md:grid-cols-2">
         <motion.button
           whileTap={{ scale: 0.98 }}
@@ -120,12 +162,14 @@ export function SupplierInput({
           disabled={running || !supplierName.trim()}
           onClick={() => onSubmit(supplierName)}
           className={`flex items-center justify-center gap-2 rounded-[24px] px-5 py-4 font-display text-lg font-semibold shadow-[0_18px_50px_rgba(35,140,255,0.32)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 ${
-            liveMode
+            agenticMode
+              ? "bg-[linear-gradient(135deg,rgba(168,85,247,0.95),rgba(139,92,246,0.96))] text-white"
+              : liveMode
               ? "bg-[linear-gradient(135deg,rgba(251,191,36,0.95),rgba(245,158,11,0.96))] text-slate-950"
               : "bg-[linear-gradient(135deg,rgba(111,235,255,0.95),rgba(67,144,255,0.96))] text-slate-950"
           }`}
         >
-          {running ? "Analyzing..." : liveMode ? "Analyze Live" : "Analyze Supplier"}
+          {running ? "Analyzing..." : agenticMode ? "🤖 Agentic Analysis" : liveMode ? "Analyze Live" : "Analyze Supplier"}
           <ArrowRight className="h-5 w-5" />
         </motion.button>
       </div>

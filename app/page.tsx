@@ -56,6 +56,7 @@ export default function HomePage() {
   const [liveLogs, setLiveLogs] = useState<string[]>([]);
   const [mode, setMode] = useState<"mock" | "live">("mock");
   const [liveMode, setLiveMode] = useState(false);
+  const [agenticMode, setAgenticMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<string[]>([]);
   const [discoveredSources, setDiscoveredSources] = useState<SearchResult[]>([]);
@@ -72,7 +73,7 @@ export default function HomePage() {
     });
   }
 
-  function resetWorkflowState(nextSupplierName: string, isLive = false) {
+  function resetWorkflowState(nextSupplierName: string, isLive = false, isAgentic = false) {
     setSupplierName(nextSupplierName);
     setRunning(true);
     setError(null);
@@ -80,7 +81,8 @@ export default function HomePage() {
     setMode(isLive ? "live" : "mock");
     setActiveStage("input");
     setCompletedStages(["input"]);
-    setLiveLogs([`Pipeline initialized for ${nextSupplierName}. Mode: ${isLive ? "LIVE" : "MOCK"}`]);
+    const modeDesc = isAgentic ? "AGENTIC AI (GPT-5-5)" : isLive ? "LIVE DATA" : "MOCK";
+    setLiveLogs([`Pipeline initialized for ${nextSupplierName}. Mode: ${modeDesc}`]);
     setSearchQueries([]);
     setDiscoveredSources([]);
     setAnalysisTasks([]);
@@ -100,7 +102,7 @@ export default function HomePage() {
     const trimmed = value.trim();
     if (!trimmed) return;
 
-    resetWorkflowState(trimmed, liveMode);
+    resetWorkflowState(trimmed, liveMode, agenticMode);
     const queries = buildSupplierQueries(trimmed).slice(0, 4);
     setSearchQueries(queries);
     pushLiveLog(`Supplier target received: ${trimmed}.`);
@@ -142,7 +144,11 @@ export default function HomePage() {
       const response = await fetch("/api/analyze-supplier", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierName: trimmed, liveMode })
+        body: JSON.stringify({
+          supplierName: trimmed,
+          liveMode,
+          agenticMode
+        })
       });
 
       if (!response.ok) {
@@ -154,13 +160,15 @@ export default function HomePage() {
           metrics: AgentPerformanceMetrics[];
           totalDuration: number;
           liveMode: boolean;
+          agenticMode: boolean;
         };
       };
 
       // Extract performance metrics if available
       if (data._performance?.metrics) {
         setPerformanceMetrics(data._performance.metrics);
-        pushLiveLog(`Performance: ${data._performance.totalDuration}ms total, ${data._performance.metrics.length} stages tracked`);
+        const aiMode = data._performance.agenticMode ? "Agentic AI" : "Standard AI";
+        pushLiveLog(`Performance: ${data._performance.totalDuration}ms total, ${aiMode}, ${data._performance.metrics.length} stages tracked`);
       }
 
       const searchPreview = data.sources_used.slice(0, 5).map((source) => ({
@@ -208,7 +216,7 @@ export default function HomePage() {
     const trimmed = value.trim();
     if (!trimmed) return;
 
-    resetWorkflowState(trimmed, false);
+    resetWorkflowState(trimmed, false, false);
 
     const fixture = getMockSupplierFixture(trimmed);
     const queries = buildSupplierQueries(trimmed).slice(0, 4);
@@ -316,7 +324,9 @@ export default function HomePage() {
             <div className="grid w-full max-w-xl grid-cols-3 gap-3">
               <div className="rounded-[28px] bg-white/[0.04] px-5 py-4 ring-1 ring-white/5 backdrop-blur-xl">
                 <div className="text-[11px] uppercase tracking-[0.28em] text-slate-500">Mode</div>
-                <div className="mt-2 font-display text-2xl text-white">{running ? "Flowing" : mode === "live" ? "Live" : "Mock"}</div>
+                <div className="mt-2 font-display text-2xl text-white">
+                  {running ? "Flowing" : agenticMode ? "Agentic" : mode === "live" ? "Live" : "Mock"}
+                </div>
               </div>
               <div className="rounded-[28px] bg-white/[0.04] px-5 py-4 ring-1 ring-white/5 backdrop-blur-xl">
                 <div className="text-[11px] uppercase tracking-[0.28em] text-slate-500">Sources</div>
@@ -353,6 +363,8 @@ export default function HomePage() {
                 running={running}
                 liveMode={liveMode}
                 onLiveModeChange={setLiveMode}
+                agenticMode={agenticMode}
+                onAgenticModeChange={setAgenticMode}
               />
             </MachineStage>
 

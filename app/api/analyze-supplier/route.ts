@@ -14,9 +14,10 @@ export async function POST(request: Request) {
   const overallStartTime = Date.now();
   
   try {
-    const body = (await request.json()) as Partial<SupplierRequest>;
+    const body = (await request.json()) as Partial<SupplierRequest> & { agenticMode?: boolean };
     const supplierName = body.supplierName?.trim();
     const liveMode = body.liveMode ?? false;
+    const agenticMode = body.agenticMode ?? false;
 
     if (!supplierName) {
       return NextResponse.json(
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
     console.log(`\n${"=".repeat(60)}`);
     console.log(`🚀 Starting Supplier Analysis`);
     console.log(`   Supplier: ${supplierName}`);
-    console.log(`   Mode: ${liveMode ? "🔴 LIVE (Bright Data APIs)" : "🟢 MOCK (Simulated Data)"}`);
+    console.log(`   Data Mode: ${liveMode ? "🔴 LIVE (Bright Data APIs)" : "🟢 MOCK (Simulated Data)"}`);
+    console.log(`   AI Mode: ${agenticMode ? "🤖 AGENTIC (GPT-5-5 Autonomous)" : "📊 STANDARD"}`);
     console.log(`${"=".repeat(60)}\n`);
 
     // Stage 1: Query Generation
@@ -90,14 +92,14 @@ export async function POST(request: Request) {
     tracker.addMetric(scrapeMetric);
     console.log(`✓ Scraped ${scrapedDocuments.length} documents (${scrapeMetric.duration}ms)`);
 
-    // Stage 4: Risk Analysis
+    // Stage 4: Risk Analysis (with optional agentic mode)
     const analysisStartTime = Date.now();
     const report = await analyzeSupplierRisk({
       supplierName,
       queries,
       searchResults: selectedResults,
       scrapedDocuments
-    });
+    }, agenticMode);
     const analysisMetric: AgentPerformanceMetrics = {
       stage: "LLM Risk Analysis",
       startTime: analysisStartTime,
@@ -122,17 +124,19 @@ export async function POST(request: Request) {
     console.log(`   Total Duration: ${totalDuration}ms`);
     console.log(`   Success Rate: ${summary.successRate.toFixed(1)}%`);
     console.log(`   API Calls: ${summary.apiCallsCount}`);
+    console.log(`   AI Mode: ${agenticMode ? "Agentic" : "Standard"}`);
     console.log(`   Risk Level: ${report.risk_level} (Score: ${report.risk_score})`);
     console.log(`${"=".repeat(60)}\n`);
 
     // Include performance metrics in response for live mode
-    const response = liveMode ? {
+    const response = liveMode || agenticMode ? {
       ...report,
       _performance: {
         totalDuration,
         metrics: tracker.getMetrics(),
         summary: summary,
-        liveMode: true
+        liveMode: liveMode,
+        agenticMode: agenticMode
       }
     } : report;
 
