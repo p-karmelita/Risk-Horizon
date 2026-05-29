@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="8" fill="#04101f"/>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="7.5" stroke="#47d7ff" stroke-opacity="0.35"/>
+  <!-- horizon line -->
+  <path d="M5 20 H27" stroke="#47d7ff" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.5"/>
+  <!-- rising risk signal / sun over horizon -->
+  <circle cx="16" cy="20" r="5.5" fill="#47d7ff" fill-opacity="0.15"/>
+  <!-- signal spike -->
+  <path d="M7 20 L12 20 L15 12 L18 24 L20 16 L22 20 L25 20" stroke="#47d7ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -30,6 +30,26 @@ export interface LiveModeContext {
   successRate: number;
 }
 
+// Workflow node ids used to highlight the active stage in the UI.
+export type ProgressStage = "input" | "search" | "analysis" | "report";
+
+// A single progress update emitted by the streaming analyze endpoint.
+export interface ProgressUpdate {
+  stage?: ProgressStage;
+  status?: "active" | "done" | "error";
+  message: string;
+}
+
+// Callback passed into the pipeline so each stage can stream live updates.
+export type ProgressCallback = (update: ProgressUpdate) => void;
+
+// One newline-delimited JSON event sent over the streaming response.
+export type StreamEvent =
+  | ({ type: "progress" } & ProgressUpdate)
+  | { type: "sources"; sources: SearchResult[] }
+  | { type: "report"; report: SupplierRiskReport; performance?: LiveModeContext }
+  | { type: "error"; message: string };
+
 export interface SourceReference {
   title: string;
   url: string;

@@ -6,6 +6,49 @@ import { StatusBadge } from "@/components/StatusBadge";
 
 const exampleSuppliers = ["TSMC", "Maersk", "Nvidia", "CATL", "Albemarle"];
 
+// Toggle with the two state names printed on the switch itself, so it's always
+// clear which mode is active and what flipping it does.
+function LabeledToggle({
+  on,
+  onChange,
+  disabled,
+  offLabel,
+  onLabel,
+  activeClassName
+}: {
+  on: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+  offLabel: string;
+  onLabel: string;
+  activeClassName: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`Switch mode. Currently ${on ? onLabel : offLabel}.`}
+      title={`Currently ${on ? onLabel : offLabel} — click to switch to ${on ? offLabel : onLabel}`}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={`relative h-9 w-full max-w-[11rem] shrink-0 rounded-full p-1 ring-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        on ? activeClassName : "bg-slate-700/80 ring-white/10"
+      }`}
+    >
+      <span
+        className={`absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-white shadow-lg transition-all duration-200 ${
+          on ? "left-1/2" : "left-1"
+        }`}
+      />
+      <span className="relative z-10 grid h-full grid-cols-2 items-center text-center text-xs font-bold uppercase tracking-wide">
+        <span className={on ? "text-white/60" : "text-slate-900"}>{offLabel}</span>
+        <span className={on ? "text-slate-900" : "text-white/60"}>{onLabel}</span>
+      </span>
+    </button>
+  );
+}
+
 export function SupplierInput({
   supplierName,
   onSupplierNameChange,
@@ -71,79 +114,67 @@ export function SupplierInput({
       </div>
 
       <div className="rounded-[24px] bg-white/[0.04] p-4 ring-1 ring-white/5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-              {liveMode ? (
-                <Zap className="h-4 w-4 text-amber-400" />
-              ) : (
-                <Database className="h-4 w-4 text-cyan" />
-              )}
-              <span>Mode: {liveMode ? "Live API" : "Mock Data"}</span>
-            </div>
-            <StatusBadge
-              label={liveMode ? "Bright Data Active" : "Simulation"}
-              tone={liveMode ? "complete" : "idle"}
-            />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+            {liveMode ? (
+              <Zap className="h-4 w-4 text-amber-400" />
+            ) : (
+              <Database className="h-4 w-4 text-cyan" />
+            )}
+            <span>Mode: {liveMode ? "Live API" : "Mock Data"}</span>
           </div>
-          <button
-            type="button"
-            disabled={running}
-            onClick={() => onLiveModeChange(!liveMode)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              liveMode ? "bg-amber-500" : "bg-slate-600"
-            }`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                liveMode ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
+          <StatusBadge
+            label={liveMode ? "Bright Data Active" : "Simulation"}
+            tone={liveMode ? "complete" : "idle"}
+          />
         </div>
-        {liveMode && (
-          <p className="mt-2 text-xs text-slate-400">
-            Using Bright Data SERP API, Web Unlocker, and Scraping Browser for real-time data collection
-          </p>
-        )}
+        <div className="mt-3">
+          <LabeledToggle
+            on={liveMode}
+            onChange={onLiveModeChange}
+            disabled={running}
+            offLabel="Mock"
+            onLabel="Live"
+            activeClassName="bg-amber-500 ring-amber-300/30"
+          />
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          {liveMode
+            ? "Live: pulls real-time data from the web via Bright Data (SERP API + Web Unlocker). Slower, uses API credits."
+            : "Mock: uses built-in sample data for an instant, free demo. Flip to Live for real-time web data."}
+        </p>
       </div>
 
       <div className="rounded-[24px] bg-white/[0.04] p-4 ring-1 ring-white/5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-              {agenticMode ? (
-                <Brain className="h-4 w-4 text-purple-400" />
-              ) : (
-                <Zap className="h-4 w-4 text-cyan" />
-              )}
-              <span>AI: {agenticMode ? "Agentic (GPT-5-5)" : "Standard"}</span>
-            </div>
-            <StatusBadge
-              label={agenticMode ? "Autonomous AI" : "Standard AI"}
-              tone={agenticMode ? "active" : "idle"}
-            />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+            {agenticMode ? (
+              <Brain className="h-4 w-4 text-purple-400" />
+            ) : (
+              <Zap className="h-4 w-4 text-cyan" />
+            )}
+            <span>AI: {agenticMode ? "Agentic (GPT-5-5)" : "Standard"}</span>
           </div>
-          <button
-            type="button"
-            disabled={running}
-            onClick={() => onAgenticModeChange(!agenticMode)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              agenticMode ? "bg-purple-500" : "bg-slate-600"
-            }`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                agenticMode ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
+          <StatusBadge
+            label={agenticMode ? "Autonomous AI" : "Standard AI"}
+            tone={agenticMode ? "active" : "idle"}
+          />
         </div>
-        {agenticMode && (
-          <p className="mt-2 text-xs text-slate-400">
-            Using GPT-5-5 with autonomous reasoning, multi-step analysis, and advanced pattern recognition
-          </p>
-        )}
+        <div className="mt-3">
+          <LabeledToggle
+            on={agenticMode}
+            onChange={onAgenticModeChange}
+            disabled={running}
+            offLabel="Standard"
+            onLabel="Agentic"
+            activeClassName="bg-purple-500 ring-purple-300/30"
+          />
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          {agenticMode
+            ? "Agentic: GPT-5-5 reasons autonomously across multiple steps for deeper analysis. Slower, more thorough."
+            : "Standard: a single fast AI pass. Flip to Agentic for autonomous multi-step reasoning."}
+        </p>
       </div>
 
       <div className="mt-auto grid gap-3 md:grid-cols-2">

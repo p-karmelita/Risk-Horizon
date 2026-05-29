@@ -24,11 +24,9 @@ export class PerformanceTracker {
   getSummary(): LiveModeContext {
     const totalDuration = Date.now() - this.startTime;
     const successfulMetrics = this.metrics.filter(m => m.success);
-    const apiCallsCount = this.metrics.filter(m => 
-      m.stage.includes("SERP") || 
-      m.stage.includes("Scrape") || 
-      m.stage.includes("Bright Data")
-    ).length;
+    // Each real Bright Data HTTP request logs a metric carrying details.zone;
+    // wrapper/aggregation metrics do not, so this counts actual API calls only.
+    const apiCallsCount = this.metrics.filter(m => Boolean(m.details?.zone)).length;
 
     return {
       enabled: true,

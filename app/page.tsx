@@ -20,7 +20,12 @@ import { SupplierInput } from "@/components/SupplierInput";
 import { WorkflowMachine } from "@/components/WorkflowMachine";
 import { getMockSupplierFixture } from "@/lib/mockData";
 import { buildSupplierQueries } from "@/lib/prompts";
-import type { SearchResult, SupplierRiskReport, AgentPerformanceMetrics } from "@/lib/types";
+import type {
+  SearchResult,
+  SupplierRiskReport,
+  AgentPerformanceMetrics,
+  StreamEvent
+} from "@/lib/types";
 
 type StageKey = "input" | "search" | "analysis" | "report";
 
@@ -107,36 +112,39 @@ export default function HomePage() {
     setSearchQueries(queries);
     pushLiveLog(`Supplier target received: ${trimmed}.`);
 
-    const liveTimeline = [
-      `Generating search patterns for ${trimmed}.`,
-      "Dispatching Bright Data search requests.",
-      "Collecting and deduplicating search results.",
-      "Unlocking source pages for extraction.",
-      "Parsing source text into evidence packets.",
-      "Extracting disruption signals from source evidence.",
-      "Scoring risk categories, confidence, and severity.",
-      "Composing final supplier risk brief."
-    ];
+    // Mark every stage before `stage` as complete and `stage` as active.
+    const advanceStage = (stage: StageKey) => {
+      setActiveStage(stage);
+      setCompletedStages(stageOrder.slice(0, stageOrder.indexOf(stage)));
+    };
 
-    let timelineIndex = 0;
-    const liveTimer = setInterval(() => {
-      const nextMessage = liveTimeline[timelineIndex];
-      if (!nextMessage) return;
-
-      pushLiveLog(nextMessage);
-
-      if (timelineIndex <= 2) {
-        setActiveStage("search");
-      } else if (timelineIndex <= 6) {
-        setCompletedStages(["input", "search"]);
-        setActiveStage("analysis");
-      } else {
-        setCompletedStages(["input", "search", "analysis"]);
-        setActiveStage("report");
+    const handleEvent = (event: StreamEvent) => {
+      if (event.type === "progress") {
+        if (event.stage) {
+          advanceStage(event.stage);
+          if (event.stage === "analysis") setAnalysisTasks(analysisTaskLabels);
+        }
+        pushLiveLog(event.message);
+      } else if (event.type === "sources") {
+        setDiscoveredSources(event.sources.slice(0, 5));
+        pushLiveLog(
+          `${event.sources.length} source packets selected for supplier review.`
+        );
+      } else if (event.type === "report") {
+        if (event.performance?.metrics) {
+          setPerformanceMetrics(event.performance.metrics);
+          pushLiveLog(
+            `Performance: ${event.performance.totalDuration}ms total, ${event.performance.metrics.length} stages tracked`
+          );
+        }
+        setAnalysisTasks(analysisTaskLabels);
+        finalizeWorkflow(event.report, liveMode ? "live" : "mock");
+      } else if (event.type === "error") {
+        setError(event.message);
+        pushLiveLog("Pipeline interrupted. Falling back or retry required.");
+        setRunning(false);
       }
-
-      timelineIndex += 1;
-    }, 650);
+    };
 
     try {
       setActiveStage("search");
@@ -151,57 +159,39 @@ export default function HomePage() {
         })
       });
 
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
         throw new Error("The supplier analysis request failed.");
       }
 
-      const data = (await response.json()) as SupplierRiskReport & {
-        _performance?: {
-          metrics: AgentPerformanceMetrics[];
-          totalDuration: number;
-          liveMode: boolean;
-          agenticMode: boolean;
-        };
+      // Consume the newline-delimited JSON event stream as it arrives.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const flushLine = (line: string) => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return;
+        try {
+          handleEvent(JSON.parse(trimmedLine) as StreamEvent);
+        } catch {
+          // ignore malformed/partial lines
+        }
       };
 
-      // Extract performance metrics if available
-      if (data._performance?.metrics) {
-        setPerformanceMetrics(data._performance.metrics);
-        const aiMode = data._performance.agenticMode ? "Agentic AI" : "Standard AI";
-        pushLiveLog(`Performance: ${data._performance.totalDuration}ms total, ${aiMode}, ${data._performance.metrics.length} stages tracked`);
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) flushLine(line);
       }
+      flushLine(buffer);
 
-      const searchPreview = data.sources_used.slice(0, 5).map((source) => ({
-        title: source.title,
-        url: source.url,
-        snippet: "Selected for supplier risk review and source-backed analysis.",
-        publisher: source.publisher,
-        publishedAt: source.published_at,
-        sourceType: source.source_type ?? "News"
-      }));
-
-      clearInterval(liveTimer);
-      setDiscoveredSources(searchPreview);
-      pushLiveLog(`${searchPreview.length} source packets selected for supplier review.`);
-      setCompletedStages(["input", "search"]);
-      setActiveStage("analysis");
-      setAnalysisTasks(analysisTaskLabels);
-      pushLiveLog("Analysis core completed category scoring and action drafting.");
-
-      const sourceDomainSet = new Set(
-        data.sources_used.map((source) => {
-          try {
-            return new URL(source.url).hostname;
-          } catch {
-            return "example.com";
-          }
-        })
-      );
-
-      const detectedMode = liveMode && data._performance?.liveMode ? "live" : "mock";
-      finalizeWorkflow(data, detectedMode);
+      // Safety net: ensure the UI never gets stuck "running" if the stream
+      // closed without a terminal report/error event.
+      setRunning(false);
     } catch (caughtError) {
-      clearInterval(liveTimer);
       setError(
         caughtError instanceof Error
           ? caughtError.message
