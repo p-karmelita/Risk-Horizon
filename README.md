@@ -10,7 +10,7 @@
 
 🏆 **Built for the [Bright Data AI Agents Web Data Hackathon](https://lablab.ai/ai-hackathons/brightdata-ai-agents-web-data-hackathon) on lablab.ai**
 
-[Quick Start](#-quick-start-under-2-minutes) · [How It Works](#️-how-it-works) · [Demo](#-demo--workflows) · [Tech Stack](#️-tech-stack)
+[Quick Start](#-quick-start-under-2-minutes) · [How It Works](#️-how-it-works) · [Demo](https://risk-horizon.replit.app/) · [Tech Stack](#️-tech-stack)
 
 </div>
 
